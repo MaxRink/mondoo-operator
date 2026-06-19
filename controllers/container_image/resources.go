@@ -82,8 +82,8 @@ func CronJob(image, integrationMrn, clusterUid, privateRegistrySecretName string
 		},
 		Spec: batchv1.CronJobSpec{
 			Schedule:          m.Spec.Containers.Schedule,
+			Suspend:           ptr.To(m.Spec.Containers.Suspend || m.Status.ScanningPaused),
 			ConcurrencyPolicy: batchv1.ForbidConcurrent,
-			Suspend:           ptr.To(m.Status.ScanningPaused),
 			JobTemplate: batchv1.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: ls},
 				Spec: batchv1.JobSpec{

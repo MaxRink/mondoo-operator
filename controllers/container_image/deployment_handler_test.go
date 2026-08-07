@@ -36,6 +36,18 @@ type DeploymentHandlerSuite struct {
 	fakeClientBuilder *fake.ClientBuilder
 }
 
+type countingClient struct {
+	client.Client
+	cronJobListCalls int
+}
+
+func (c *countingClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	if _, ok := list.(*batchv1.CronJobList); ok {
+		c.cronJobListCalls++
+	}
+	return c.Client.List(ctx, list, opts...)
+}
+
 func (s *DeploymentHandlerSuite) SetupSuite() {
 	s.ctx = context.Background()
 	s.scheme = clientgoscheme.Scheme
@@ -527,6 +539,27 @@ func (s *DeploymentHandlerSuite) TestReconcile_WIF_InvalidConfig() {
 
 	_, err := d.Reconcile(s.ctx)
 	s.Error(err, "should fail validation when provider-specific config is missing")
+}
+
+func (s *DeploymentHandlerSuite) TestReconcile_AvoidsRedundantCronJobListings() {
+	baseClient := s.fakeClientBuilder.Build()
+	countingKubeClient := &countingClient{Client: baseClient}
+
+	d := DeploymentHandler{
+		KubeClient:             countingKubeClient,
+		Mondoo:                 &s.auditConfig,
+		ContainerImageResolver: s.containerImageResolver,
+		MondooOperatorConfig:   &mondoov1alpha2.MondooOperatorConfig{},
+	}
+
+	s.NoError(countingKubeClient.Create(s.ctx, &s.auditConfig))
+
+	_, err := d.Reconcile(s.ctx)
+	s.NoError(err)
+
+	// One list during stale CronJob cleanup + one list for status/conditions update.
+	// GC now reuses the already-listed CronJobs.
+	s.Equal(2, countingKubeClient.cronJobListCalls)
 }
 
 func (s *DeploymentHandlerSuite) createDeploymentHandler() DeploymentHandler {

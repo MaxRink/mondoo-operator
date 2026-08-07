@@ -196,32 +196,59 @@ func (r *MondooAuditConfigReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	r.cleanupOrphanedAdmissionResources(ctx, mondooAuditConfig)
 	r.cleanupOrphanedScanAPIResources(ctx, mondooAuditConfig)
 
-	// Set the default cron tab if none is set
-	shouldUpdate := false
-	if mondooAuditConfig.Spec.KubernetesResources.ContainerImageScanning && !mondooAuditConfig.Spec.Containers.Enable {
-		mondooAuditConfig.Spec.Containers.Enable = true
-		shouldUpdate = true
-	}
-	if mondooAuditConfig.Spec.Nodes.Enable && mondooAuditConfig.Spec.Nodes.Schedule == "" {
-		mondooAuditConfig.Spec.Nodes.Schedule = fmt.Sprintf("%d * * * *", time.Now().Add(1*time.Minute).Minute())
-		shouldUpdate = true
-	}
-	if mondooAuditConfig.Spec.KubernetesResources.Enable && mondooAuditConfig.Spec.KubernetesResources.Schedule == "" {
-		mondooAuditConfig.Spec.KubernetesResources.Schedule = fmt.Sprintf("%d * * * *", time.Now().Add(1*time.Minute).Minute())
-		shouldUpdate = true
-	}
-	if mondooAuditConfig.Spec.Containers.Enable && mondooAuditConfig.Spec.Containers.Schedule == "" {
-		cronStart := time.Now().Add(1 * time.Minute)
-		mondooAuditConfig.Spec.Containers.Schedule = fmt.Sprintf("%d %d * * *", cronStart.Minute(), cronStart.Hour())
-		shouldUpdate = true
-	}
-	if shouldUpdate {
-		err := r.Update(ctx, mondooAuditConfig)
+	var remoteEffectiveSpec *v1alpha2.MondooAuditConfigSpec
+	if mondooAuditConfig.Spec.RemoteManaged && mondooAuditConfig.Status.RemoteConfig != "" {
+		effectiveSpec, configWarnings, err := k8s.EffectiveSpec(
+			mondooAuditConfig.Spec,
+			mondooAuditConfig.Status.RemoteConfig,
+			mondooAuditConfig.UID,
+		)
 		if err != nil {
-			log.Error(err, "failed to update MondooAuditConfig with default schedule")
-			return ctrl.Result{}, err
+			log.Error(err, "failed to compute effective config from remote, using local spec")
+		} else {
+			remoteEffectiveSpec = &effectiveSpec
+			mondooAuditConfig.Spec = effectiveSpec
 		}
-		return ctrl.Result{Requeue: true}, nil
+		if len(configWarnings) > 0 {
+			msg := "Remote config applied with warnings: " + strings.Join(configWarnings, "; ")
+			log.Info(msg)
+			mondooAuditConfig.Status.Conditions = mondoo.SetMondooAuditCondition(
+				mondooAuditConfig.Status.Conditions, v1alpha2.RemoteConfigDegradedCondition, corev1.ConditionTrue,
+				"ConfigWarning", msg, mondoo.UpdateConditionIfReasonOrMessageChange, nil, "",
+			)
+			if updateErr := r.Client.Status().Update(ctx, mondooAuditConfig); updateErr != nil {
+				log.Error(updateErr, "failed to update RemoteConfigDegraded condition with warnings")
+			}
+		}
+	}
+
+	if !mondooAuditConfig.Spec.RemoteManaged {
+		shouldUpdate := false
+		if mondooAuditConfig.Spec.KubernetesResources.ContainerImageScanning && !mondooAuditConfig.Spec.Containers.Enable {
+			mondooAuditConfig.Spec.Containers.Enable = true
+			shouldUpdate = true
+		}
+		if mondooAuditConfig.Spec.Nodes.Enable && mondooAuditConfig.Spec.Nodes.Schedule == "" {
+			mondooAuditConfig.Spec.Nodes.Schedule = fmt.Sprintf("%d * * * *", time.Now().Add(1*time.Minute).Minute())
+			shouldUpdate = true
+		}
+		if mondooAuditConfig.Spec.KubernetesResources.Enable && mondooAuditConfig.Spec.KubernetesResources.Schedule == "" {
+			mondooAuditConfig.Spec.KubernetesResources.Schedule = fmt.Sprintf("%d * * * *", time.Now().Add(1*time.Minute).Minute())
+			shouldUpdate = true
+		}
+		if mondooAuditConfig.Spec.Containers.Enable && mondooAuditConfig.Spec.Containers.Schedule == "" {
+			cronStart := time.Now().Add(1 * time.Minute)
+			mondooAuditConfig.Spec.Containers.Schedule = fmt.Sprintf("%d %d * * *", cronStart.Minute(), cronStart.Hour())
+			shouldUpdate = true
+		}
+		if shouldUpdate {
+			err := r.Update(ctx, mondooAuditConfig)
+			if err != nil {
+				log.Error(err, "failed to update MondooAuditConfig with default schedule")
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{Requeue: true}, nil
+		}
 	}
 
 	mondooAuditConfigCopy := mondooAuditConfig.DeepCopy()
@@ -310,6 +337,13 @@ func (r *MondooAuditConfigReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	if reconcileError = k8s.SyncConfigOverrideSecret(ctx, r.Client, mondooAuditConfig); reconcileError != nil {
 		log.Error(reconcileError, "failed to sync config override secret for space routing")
 		return ctrl.Result{}, reconcileError
+	}
+
+	// Status().Update() calls above (warnings, auto-create integration) refresh
+	// the in-memory object from the API server, reverting the spec to the
+	// persisted (local) version. Re-apply the effective spec before sub-reconcilers.
+	if remoteEffectiveSpec != nil {
+		mondooAuditConfig.Spec = *remoteEffectiveSpec
 	}
 
 	nodes := nodes.DeploymentHandler{

@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"go.mondoo.com/mondoo-operator/api/v1alpha2"
+	"go.mondoo.com/mondoo-operator/pkg/utils/k8s"
 	"go.mondoo.com/mql/v13/providers-sdk/v1/inventory"
 )
 
@@ -401,6 +402,23 @@ func TestCronJob_Suspend(t *testing.T) {
 	assert.True(t, *cj.Spec.Suspend)
 }
 
+func TestCronJob_UnsuspendWhenScanningResumed(t *testing.T) {
+	m := testAuditConfig()
+	m.Status.ScanningPaused = true
+	cfg := v1alpha2.MondooOperatorConfig{}
+
+	current := CronJob("test-image:latest", m, cfg)
+	require.NotNil(t, current.Spec.Suspend)
+	assert.True(t, *current.Spec.Suspend)
+
+	m.Status.ScanningPaused = false
+	desired := CronJob("test-image:latest", m, cfg)
+	k8s.UpdateCronJobFields(current, desired)
+
+	require.NotNil(t, current.Spec.Suspend)
+	assert.False(t, *current.Spec.Suspend)
+}
+
 func TestExternalClusterCronJob_WithProxy(t *testing.T) {
 	m := testAuditConfig()
 	cluster := v1alpha2.ExternalCluster{
@@ -491,6 +509,29 @@ func TestExternalClusterCronJob_Suspend(t *testing.T) {
 
 	require.NotNil(t, cj.Spec.Suspend)
 	assert.True(t, *cj.Spec.Suspend)
+}
+
+func TestExternalClusterCronJob_UnsuspendWhenScanningResumed(t *testing.T) {
+	m := testAuditConfig()
+	m.Status.ScanningPaused = true
+	cluster := v1alpha2.ExternalCluster{
+		Name: "remote",
+		KubeconfigSecretRef: &corev1.LocalObjectReference{
+			Name: "kubeconfig-secret",
+		},
+	}
+	cfg := v1alpha2.MondooOperatorConfig{}
+
+	current := ExternalClusterCronJob("test-image:latest", cluster, m, cfg)
+	require.NotNil(t, current.Spec.Suspend)
+	assert.True(t, *current.Spec.Suspend)
+
+	m.Status.ScanningPaused = false
+	desired := ExternalClusterCronJob("test-image:latest", cluster, m, cfg)
+	k8s.UpdateCronJobFields(current, desired)
+
+	require.NotNil(t, current.Spec.Suspend)
+	assert.False(t, *current.Spec.Suspend)
 }
 
 func TestExternalClusterCronJob_InheritsKubernetesResourcesSuspend(t *testing.T) {

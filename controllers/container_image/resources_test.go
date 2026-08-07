@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"go.mondoo.com/mondoo-operator/api/v1alpha2"
+	"go.mondoo.com/mondoo-operator/pkg/utils/k8s"
 	"go.mondoo.com/mql/v13/providers-sdk/v1/inventory"
 )
 
@@ -370,6 +371,23 @@ func TestCronJob_Suspend(t *testing.T) {
 
 	require.NotNil(t, cj.Spec.Suspend)
 	assert.True(t, *cj.Spec.Suspend)
+}
+
+func TestCronJob_UnsuspendWhenScanningResumed(t *testing.T) {
+	m := testAuditConfig()
+	m.Status.ScanningPaused = true
+	cfg := v1alpha2.MondooOperatorConfig{}
+
+	current := CronJob("test-image:latest", "", testClusterUID, "", m, cfg)
+	require.NotNil(t, current.Spec.Suspend)
+	assert.True(t, *current.Spec.Suspend)
+
+	m.Status.ScanningPaused = false
+	desired := CronJob("test-image:latest", "", testClusterUID, "", m, cfg)
+	k8s.UpdateCronJobFields(current, desired)
+
+	require.NotNil(t, current.Spec.Suspend)
+	assert.False(t, *current.Spec.Suspend)
 }
 
 func TestCronJob_WIF_AKS(t *testing.T) {

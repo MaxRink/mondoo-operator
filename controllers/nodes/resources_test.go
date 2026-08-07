@@ -318,6 +318,27 @@ func TestCronJob_Suspend(t *testing.T) {
 	assert.True(t, *cj.Spec.Suspend)
 }
 
+func TestCronJob_UnsuspendWhenScanningResumed(t *testing.T) {
+	testNode := corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-node-name",
+		},
+	}
+	mac := testMondooAuditConfig()
+	mac.Status.ScanningPaused = true
+
+	current := CronJob("test123", testNode, mac, false, v1alpha2.MondooOperatorConfig{})
+	require.NotNil(t, current.Spec.Suspend)
+	assert.True(t, *current.Spec.Suspend)
+
+	mac.Status.ScanningPaused = false
+	desired := CronJob("test123", testNode, mac, false, v1alpha2.MondooOperatorConfig{})
+	k8s.UpdateCronJobFields(current, desired)
+
+	require.NotNil(t, current.Spec.Suspend)
+	assert.False(t, *current.Spec.Suspend)
+}
+
 func TestInventory(t *testing.T) {
 	auditConfig := v1alpha2.MondooAuditConfig{ObjectMeta: metav1.ObjectMeta{Name: "mondoo-client"}}
 

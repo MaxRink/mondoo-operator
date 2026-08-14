@@ -373,6 +373,47 @@ func TestCronJob_Suspend(t *testing.T) {
 	assert.True(t, *cj.Spec.Suspend)
 }
 
+func TestCronJob_SuspendMatrix(t *testing.T) {
+	cfg := v1alpha2.MondooOperatorConfig{}
+
+	t.Run("clearing Suspend resumes the CronJob", func(t *testing.T) {
+		m := testAuditConfig()
+		m.Spec.Containers.Suspend = true
+
+		current := CronJob("test-image:latest", "", testClusterUID, "", m, cfg)
+		require.NotNil(t, current.Spec.Suspend)
+		assert.True(t, *current.Spec.Suspend)
+
+		m.Spec.Containers.Suspend = false
+		m.Status.ScanningPaused = false
+		desired := CronJob("test-image:latest", "", testClusterUID, "", m, cfg)
+		k8s.UpdateCronJobFields(current, desired)
+
+		require.NotNil(t, current.Spec.Suspend)
+		assert.False(t, *current.Spec.Suspend)
+	})
+
+	t.Run("ScanningPaused suspends even when Suspend is false", func(t *testing.T) {
+		m := testAuditConfig()
+		m.Spec.Containers.Suspend = false
+		m.Status.ScanningPaused = true
+
+		cj := CronJob("test-image:latest", "", testClusterUID, "", m, cfg)
+		require.NotNil(t, cj.Spec.Suspend)
+		assert.True(t, *cj.Spec.Suspend)
+	})
+
+	t.Run("both pause sources cleared resumes the CronJob", func(t *testing.T) {
+		m := testAuditConfig()
+		m.Spec.Containers.Suspend = false
+		m.Status.ScanningPaused = false
+
+		cj := CronJob("test-image:latest", "", testClusterUID, "", m, cfg)
+		require.NotNil(t, cj.Spec.Suspend)
+		assert.False(t, *cj.Spec.Suspend)
+	})
+}
+
 func TestCronJob_UnsuspendWhenScanningResumed(t *testing.T) {
 	m := testAuditConfig()
 	m.Status.ScanningPaused = true

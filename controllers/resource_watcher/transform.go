@@ -20,6 +20,9 @@ import (
 // statuses in the cache are therefore never read, but they dominate the
 // retained heap, in particular for ReplicaSets and Deployments which carry a
 // full pod template each.
+//
+// Labels stay. They are small next to a spec, and label based filtering of the
+// watched resources is in review in #1518.
 func CacheTransform(obj any) (any, error) {
 	switch o := obj.(type) {
 	case *appsv1.Deployment:

@@ -105,12 +105,16 @@ func TestCacheTransform_DropsPayload(t *testing.T) {
 }
 
 func TestCacheTransform_PassesUnknownTypesThrough(t *testing.T) {
-	obj := &corev1.Endpoints{ObjectMeta: testMeta()}
+	obj := &corev1.Endpoints{
+		ObjectMeta: testMeta(),
+		Subsets:    []corev1.EndpointSubset{{Addresses: []corev1.EndpointAddress{{IP: "10.0.0.1"}}}},
+	}
+	want := obj.DeepCopy()
 
 	out, err := CacheTransform(obj)
 	require.NoError(t, err)
 	assert.Same(t, obj, out)
-	assert.NotNil(t, obj.GetAnnotations())
+	assert.Equal(t, want, out, "unknown types must pass through unmodified")
 }
 
 func TestCacheTransform_HandlesEveryWatchedResourceType(t *testing.T) {

@@ -328,6 +328,88 @@ func TestDaemonSet_Capabilities(t *testing.T) {
 	})
 }
 
+func TestCronJob_Suspend(t *testing.T) {
+	testNode := corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-node-name",
+		},
+	}
+	mac := testMondooAuditConfig()
+	mac.Spec.Nodes.Suspend = true
+
+	cj := CronJob("test123", testNode, mac, false, v1alpha2.MondooOperatorConfig{})
+
+	require.NotNil(t, cj.Spec.Suspend)
+	assert.True(t, *cj.Spec.Suspend)
+}
+
+func TestCronJob_SuspendMatrix(t *testing.T) {
+	testNode := corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-node-name",
+		},
+	}
+	cfg := v1alpha2.MondooOperatorConfig{}
+
+	t.Run("clearing Suspend resumes the CronJob", func(t *testing.T) {
+		mac := testMondooAuditConfig()
+		mac.Spec.Nodes.Suspend = true
+
+		current := CronJob("test123", testNode, mac, false, cfg)
+		require.NotNil(t, current.Spec.Suspend)
+		assert.True(t, *current.Spec.Suspend)
+
+		mac.Spec.Nodes.Suspend = false
+		mac.Status.ScanningPaused = false
+		desired := CronJob("test123", testNode, mac, false, cfg)
+		k8s.UpdateCronJobFields(current, desired)
+
+		require.NotNil(t, current.Spec.Suspend)
+		assert.False(t, *current.Spec.Suspend)
+	})
+
+	t.Run("ScanningPaused suspends even when Suspend is false", func(t *testing.T) {
+		mac := testMondooAuditConfig()
+		mac.Spec.Nodes.Suspend = false
+		mac.Status.ScanningPaused = true
+
+		cj := CronJob("test123", testNode, mac, false, cfg)
+		require.NotNil(t, cj.Spec.Suspend)
+		assert.True(t, *cj.Spec.Suspend)
+	})
+
+	t.Run("both pause sources cleared resumes the CronJob", func(t *testing.T) {
+		mac := testMondooAuditConfig()
+		mac.Spec.Nodes.Suspend = false
+		mac.Status.ScanningPaused = false
+
+		cj := CronJob("test123", testNode, mac, false, cfg)
+		require.NotNil(t, cj.Spec.Suspend)
+		assert.False(t, *cj.Spec.Suspend)
+	})
+}
+
+func TestCronJob_UnsuspendWhenScanningResumed(t *testing.T) {
+	testNode := corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-node-name",
+		},
+	}
+	mac := testMondooAuditConfig()
+	mac.Status.ScanningPaused = true
+
+	current := CronJob("test123", testNode, mac, false, v1alpha2.MondooOperatorConfig{})
+	require.NotNil(t, current.Spec.Suspend)
+	assert.True(t, *current.Spec.Suspend)
+
+	mac.Status.ScanningPaused = false
+	desired := CronJob("test123", testNode, mac, false, v1alpha2.MondooOperatorConfig{})
+	k8s.UpdateCronJobFields(current, desired)
+
+	require.NotNil(t, current.Spec.Suspend)
+	assert.False(t, *current.Spec.Suspend)
+}
+
 func TestInventory(t *testing.T) {
 	auditConfig := v1alpha2.MondooAuditConfig{ObjectMeta: metav1.ObjectMeta{Name: "mondoo-client"}}
 

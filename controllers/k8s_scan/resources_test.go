@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"go.mondoo.com/mondoo-operator/api/v1alpha2"
+	"go.mondoo.com/mondoo-operator/pkg/utils/k8s"
 	"go.mondoo.com/mql/v13/providers-sdk/v1/inventory"
 )
 
@@ -412,6 +413,75 @@ func TestExternalClusterCronJob_ActiveDeadline_Unset(t *testing.T) {
 	assert.Nil(t, cj.Spec.JobTemplate.Spec.ActiveDeadlineSeconds)
 }
 
+func TestCronJob_Suspend(t *testing.T) {
+	m := testAuditConfig()
+	m.Spec.KubernetesResources.Suspend = true
+	cfg := v1alpha2.MondooOperatorConfig{}
+
+	cj := CronJob("test-image:latest", m, cfg)
+
+	require.NotNil(t, cj.Spec.Suspend)
+	assert.True(t, *cj.Spec.Suspend)
+}
+
+func TestCronJob_SuspendMatrix(t *testing.T) {
+	cfg := v1alpha2.MondooOperatorConfig{}
+
+	t.Run("clearing Suspend resumes the CronJob", func(t *testing.T) {
+		m := testAuditConfig()
+		m.Spec.KubernetesResources.Suspend = true
+
+		current := CronJob("test-image:latest", m, cfg)
+		require.NotNil(t, current.Spec.Suspend)
+		assert.True(t, *current.Spec.Suspend)
+
+		m.Spec.KubernetesResources.Suspend = false
+		m.Status.ScanningPaused = false
+		desired := CronJob("test-image:latest", m, cfg)
+		k8s.UpdateCronJobFields(current, desired)
+
+		require.NotNil(t, current.Spec.Suspend)
+		assert.False(t, *current.Spec.Suspend)
+	})
+
+	t.Run("ScanningPaused suspends even when Suspend is false", func(t *testing.T) {
+		m := testAuditConfig()
+		m.Spec.KubernetesResources.Suspend = false
+		m.Status.ScanningPaused = true
+
+		cj := CronJob("test-image:latest", m, cfg)
+		require.NotNil(t, cj.Spec.Suspend)
+		assert.True(t, *cj.Spec.Suspend)
+	})
+
+	t.Run("both pause sources cleared resumes the CronJob", func(t *testing.T) {
+		m := testAuditConfig()
+		m.Spec.KubernetesResources.Suspend = false
+		m.Status.ScanningPaused = false
+
+		cj := CronJob("test-image:latest", m, cfg)
+		require.NotNil(t, cj.Spec.Suspend)
+		assert.False(t, *cj.Spec.Suspend)
+	})
+}
+
+func TestCronJob_UnsuspendWhenScanningResumed(t *testing.T) {
+	m := testAuditConfig()
+	m.Status.ScanningPaused = true
+	cfg := v1alpha2.MondooOperatorConfig{}
+
+	current := CronJob("test-image:latest", m, cfg)
+	require.NotNil(t, current.Spec.Suspend)
+	assert.True(t, *current.Spec.Suspend)
+
+	m.Status.ScanningPaused = false
+	desired := CronJob("test-image:latest", m, cfg)
+	k8s.UpdateCronJobFields(current, desired)
+
+	require.NotNil(t, current.Spec.Suspend)
+	assert.False(t, *current.Spec.Suspend)
+}
+
 func TestExternalClusterCronJob_WithProxy(t *testing.T) {
 	m := testAuditConfig()
 	cluster := v1alpha2.ExternalCluster{
@@ -485,6 +555,63 @@ func TestExternalClusterCronJob_ImagePullSecrets(t *testing.T) {
 	secrets := cj.Spec.JobTemplate.Spec.Template.Spec.ImagePullSecrets
 	require.Len(t, secrets, 1)
 	assert.Equal(t, "my-registry-secret", secrets[0].Name)
+}
+
+func TestExternalClusterCronJob_Suspend(t *testing.T) {
+	m := testAuditConfig()
+	cluster := v1alpha2.ExternalCluster{
+		Name:    "remote",
+		Suspend: true,
+		KubeconfigSecretRef: &corev1.LocalObjectReference{
+			Name: "kubeconfig-secret",
+		},
+	}
+	cfg := v1alpha2.MondooOperatorConfig{}
+
+	cj := ExternalClusterCronJob("test-image:latest", cluster, m, cfg)
+
+	require.NotNil(t, cj.Spec.Suspend)
+	assert.True(t, *cj.Spec.Suspend)
+}
+
+func TestExternalClusterCronJob_UnsuspendWhenScanningResumed(t *testing.T) {
+	m := testAuditConfig()
+	m.Status.ScanningPaused = true
+	cluster := v1alpha2.ExternalCluster{
+		Name: "remote",
+		KubeconfigSecretRef: &corev1.LocalObjectReference{
+			Name: "kubeconfig-secret",
+		},
+	}
+	cfg := v1alpha2.MondooOperatorConfig{}
+
+	current := ExternalClusterCronJob("test-image:latest", cluster, m, cfg)
+	require.NotNil(t, current.Spec.Suspend)
+	assert.True(t, *current.Spec.Suspend)
+
+	m.Status.ScanningPaused = false
+	desired := ExternalClusterCronJob("test-image:latest", cluster, m, cfg)
+	k8s.UpdateCronJobFields(current, desired)
+
+	require.NotNil(t, current.Spec.Suspend)
+	assert.False(t, *current.Spec.Suspend)
+}
+
+func TestExternalClusterCronJob_InheritsKubernetesResourcesSuspend(t *testing.T) {
+	m := testAuditConfig()
+	m.Spec.KubernetesResources.Suspend = true
+	cluster := v1alpha2.ExternalCluster{
+		Name: "remote",
+		KubeconfigSecretRef: &corev1.LocalObjectReference{
+			Name: "kubeconfig-secret",
+		},
+	}
+	cfg := v1alpha2.MondooOperatorConfig{}
+
+	cj := ExternalClusterCronJob("test-image:latest", cluster, m, cfg)
+
+	require.NotNil(t, cj.Spec.Suspend)
+	assert.True(t, *cj.Spec.Suspend)
 }
 
 func TestExternalClusterCronJob_HasMondooTmpDir(t *testing.T) {

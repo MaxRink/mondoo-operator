@@ -345,6 +345,8 @@ externalClusters:
       name: prod-kubeconfig
     # Custom schedule for this cluster
     schedule: "0 */2 * * *"  # Every 2 hours
+    # Pause this external cluster scan CronJob
+    suspend: true
     # Cluster-specific namespace filtering
     filtering:
       namespaces:
@@ -365,6 +367,7 @@ externalClusters:
 | `name` | Unique identifier for the cluster (used in CronJob names) |
 | `kubeconfigSecretRef` | Reference to Secret containing kubeconfig |
 | `schedule` | Override the default scan schedule (cron format) |
+| `suspend` | Pause this external cluster scan CronJob without deleting it |
 | `filtering` | Namespace include/exclude specific to this cluster |
 | `containerImageScanning` | Enable container image scanning for this cluster |
 | `privateRegistriesPullSecretRef` | Registry credentials for private images |
@@ -1024,6 +1027,26 @@ Notes:
   the operator take precedence and cannot be overwritten.
 - `nodeSelector` is ignored for node scan pods because they are pinned to a specific node.
 - `nodes.jobOverrides` only applies to the `cronjob` node scanning style.
+
+To pause scheduled scan CronJobs without deleting generated resources, set `suspend: true` on the relevant scan configuration:
+
+```yaml
+spec:
+ kubernetesResources:
+   enable: true
+   suspend: true
+ containers:
+   enable: true
+   suspend: true
+ nodes:
+   enable: true
+   suspend: true
+```
+
+Suspending a scan type pauses future scheduled CronJob runs while leaving the
+generated resources and last reported scan status intact. Mondoo status
+reporting continues to show the most recent completed run until a later
+unsuspended scan updates it.
 
 ## Real-time Resource Watcher (Opt-in)
 

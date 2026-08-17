@@ -77,6 +77,19 @@ func TestUpdateCronJobFields_JobOverrides(t *testing.T) {
 	assert.Equal(t, desired.Spec.JobTemplate.Spec.Template.Spec.Tolerations, obj.Spec.JobTemplate.Spec.Template.Spec.Tolerations)
 }
 
+func TestUpdateCronJobFields_Suspend(t *testing.T) {
+	desired := &batchv1.CronJob{
+		Spec: batchv1.CronJobSpec{
+			Suspend: ptr.To(true),
+		},
+	}
+
+	obj := &batchv1.CronJob{}
+	UpdateCronJobFields(obj, desired)
+
+	assert.Equal(t, desired.Spec.Suspend, obj.Spec.Suspend)
+}
+
 func TestUpdateCronJobFields_PreservesUnmanagedFields(t *testing.T) {
 	obj := &batchv1.CronJob{
 		Spec: batchv1.CronJobSpec{

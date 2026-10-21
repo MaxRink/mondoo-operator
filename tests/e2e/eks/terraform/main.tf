@@ -48,7 +48,7 @@ module "vpc" {
 
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 20.0"
+  version = "~> 21.29"
 
   cluster_name    = "${local.name_prefix}-cluster"
   cluster_version = var.k8s_version
@@ -104,7 +104,7 @@ resource "aws_ecr_repository" "private_test" {
 module "eks_target" {
   count   = var.enable_target_cluster ? 1 : 0
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 20.0"
+  version = "~> 21.29"
 
   cluster_name    = "${local.name_prefix}-target"
   cluster_version = var.k8s_version

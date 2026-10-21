@@ -26,7 +26,7 @@ data "aws_caller_identity" "current" {}
 
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
-  version = "~> 5.0"
+  version = "~> 6.7"
 
   name = "${local.name_prefix}-vpc"
   cidr = "10.0.0.0/16"

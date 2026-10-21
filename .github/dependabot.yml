@@ -23,3 +23,50 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      routine-updates:
+        patterns:
+        - '*'
+        update-types:
+        - minor
+        - patch
+  - package-ecosystem: helm
+    directory: /charts/mondoo-operator
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      routine-updates:
+        patterns:
+        - '*'
+        update-types:
+        - minor
+        - patch
+  - package-ecosystem: terraform
+    directories:
+    - /.github/terraform/aks
+    - /.github/terraform/aws
+    - /.github/terraform/gke
+    - /tests/e2e/aks/terraform
+    - /tests/e2e/eks/terraform
+    - /tests/e2e/gke/terraform
+    - /tests/integration/oom-stress/terraform
+    - /tests/terraform/wif/aks
+    - /tests/terraform/wif/eks
+    - /tests/terraform/wif/gke
+    - /tests/terraform/wif/gke-autopilot
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      routine-updates:
+        patterns:
+        - '*'
+        update-types:
+        - minor
+        - patch

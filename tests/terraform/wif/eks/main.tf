@@ -45,7 +45,7 @@ module "vpc" {
 
 module "management" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 20.0"
+  version = "~> 21.29"
 
   cluster_name    = "${local.name_prefix}-mgmt"
   cluster_version = var.k8s_version
@@ -75,7 +75,7 @@ module "management" {
 
 module "target" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 20.0"
+  version = "~> 21.29"
 
   cluster_name    = "${local.name_prefix}-target"
   cluster_version = var.k8s_version
